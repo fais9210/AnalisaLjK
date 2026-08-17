@@ -53,6 +53,17 @@ export default function App() {
   // Initial load
   useEffect(() => {
     refreshAllData();
+
+    // Check Cloud DB connection and sync if data exists
+    StorageService.checkCloudDbStatus().then((status) => {
+      if (status.connected) {
+        StorageService.syncFromCloudDb().then((res) => {
+          if (res.success) {
+            refreshAllData();
+          }
+        });
+      }
+    });
   }, []);
 
   const refreshAllData = () => {
@@ -219,6 +230,7 @@ export default function App() {
     };
     StorageService.saveExamRecord(newRecord);
     setExamRecords(StorageService.getExamRecords());
+    StorageService.saveExamRecordToCloud(newRecord);
   };
 
   // Load a record from history
@@ -235,6 +247,7 @@ export default function App() {
     if (confirm('Hapus arsip rekaman ujian ini dari riwayat database?')) {
       StorageService.deleteExamRecord(recordId);
       setExamRecords(StorageService.getExamRecords());
+      StorageService.deleteExamRecordFromCloud(recordId);
     }
   };
 

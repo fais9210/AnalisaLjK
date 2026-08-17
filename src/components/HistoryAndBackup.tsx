@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { ExamRecord, ExamSheetConfig, StudentScoreRow } from '../types';
+import React, { useEffect, useRef, useState } from 'react';
+import { ExamRecord } from '../types';
 import { StorageService } from '../services/storageService';
 import {
   Database,
@@ -10,11 +10,13 @@ import {
   Trash2,
   Eye,
   CheckCircle2,
-  FileSpreadsheet,
-  FileText,
-  AlertTriangle,
   History,
   Archive,
+  CloudUpload,
+  CloudDownload,
+  RefreshCw,
+  Server,
+  Zap,
 } from 'lucide-react';
 
 interface HistoryAndBackupProps {
@@ -33,9 +35,61 @@ export const HistoryAndBackup: React.FC<HistoryAndBackupProps> = ({
   const backupInputRef = useRef<HTMLInputElement>(null);
   const [notification, setNotification] = useState<string | null>(null);
 
+  // Cloud Neon DB state
+  const [cloudStatus, setCloudStatus] = useState<{
+    loading: boolean;
+    connected: boolean;
+    version?: string;
+    error?: string;
+  }>({
+    loading: true,
+    connected: false,
+  });
+  const [isSyncingToCloud, setIsSyncingToCloud] = useState(false);
+  const [isSyncingFromCloud, setIsSyncingFromCloud] = useState(false);
+
   const showToast = (msg: string) => {
     setNotification(msg);
-    setTimeout(() => setNotification(null), 3000);
+    setTimeout(() => setNotification(null), 3500);
+  };
+
+  const checkDb = async () => {
+    setCloudStatus((prev) => ({ ...prev, loading: true }));
+    const res = await StorageService.checkCloudDbStatus();
+    setCloudStatus({
+      loading: false,
+      connected: res.connected,
+      version: res.version,
+      error: res.error,
+    });
+  };
+
+  useEffect(() => {
+    checkDb();
+  }, []);
+
+  const handlePushToCloud = async () => {
+    setIsSyncingToCloud(true);
+    const res = await StorageService.syncToCloudDb();
+    setIsSyncingToCloud(false);
+    if (res.success) {
+      showToast(res.message || 'Berhasil mengunggah seluruh data ke Neon DB!');
+      checkDb();
+    } else {
+      showToast(`Gagal sinkronisasi: ${res.message}`);
+    }
+  };
+
+  const handlePullFromCloud = async () => {
+    setIsSyncingFromCloud(true);
+    const res = await StorageService.syncFromCloudDb();
+    setIsSyncingFromCloud(false);
+    if (res.success) {
+      onRefreshAllData();
+      showToast(res.message || 'Berhasil memperbarui data lokal dari Neon DB!');
+    } else {
+      showToast(`Gagal mengambil data dari cloud: ${res.message}`);
+    }
   };
 
   const handleDownloadFullBackup = () => {
@@ -88,11 +142,84 @@ export const HistoryAndBackup: React.FC<HistoryAndBackupProps> = ({
   return (
     <div className="space-y-6">
       {notification && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-xl">
-          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-          {notification}
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-xl animate-in fade-in">
+          <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+          <span>{notification}</span>
         </div>
       )}
+
+      {/* Cloud Database (Neon DB / Render) Card */}
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-xs">
+              <Server className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-slate-900">Integrasi Cloud Database (Neon DB & Render)</h3>
+                {cloudStatus.loading ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                    <RefreshCw className="h-3 w-3 animate-spin" /> Memeriksa...
+                  </span>
+                ) : cloudStatus.connected ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800 border border-emerald-200">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Terhubung ke Neon DB
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 border border-amber-200">
+                    Mode Lokal / Standalone
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {cloudStatus.connected
+                  ? 'Aplikasi terhubung ke PostgreSQL Neon DB. Data tersinkronisasi di cloud.'
+                  : 'Variabel DATABASE_URL belum terpasang. Data disimpan aman di browser dan siap disambungkan ke Neon DB saat deploy.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={checkDb}
+              disabled={cloudStatus.loading}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
+              title="Periksa koneksi PostgreSQL"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${cloudStatus.loading ? 'animate-spin' : ''}`} /> Cek Status
+            </button>
+
+            <button
+              onClick={handlePushToCloud}
+              disabled={isSyncingToCloud || !cloudStatus.connected}
+              className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 transition shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <CloudUpload className="h-3.5 w-3.5" />
+              {isSyncingToCloud ? 'Mengunggah...' : 'Unggah ke Neon DB'}
+            </button>
+
+            <button
+              onClick={handlePullFromCloud}
+              disabled={isSyncingFromCloud || !cloudStatus.connected}
+              className="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3.5 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <CloudDownload className="h-3.5 w-3.5" />
+              {isSyncingFromCloud ? 'Mengambil...' : 'Tarik dari Neon DB'}
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs text-slate-600 flex items-start gap-2.5">
+          <Zap className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold text-slate-800">Petunjuk Konfigurasi Render & Neon DB:</p>
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              Di dashboard <b>Render Web Service</b>, masukkan Environment Variable <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200 font-mono text-indigo-700">DATABASE_URL</code> dengan connection string PostgreSQL dari <b>Neon DB</b> (contoh: <code className="text-slate-600 font-mono">postgres://user:pass@ep-xyz.aws.neon.tech/neondb?sslmode=require</code>). Aplikasi akan otomatis membuat tabel dan menyinkronkan data.
+            </p>
+          </div>
+        </div>
+      </div>
 
       {/* Database & Backup Actions Banner */}
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
@@ -102,9 +229,9 @@ export const HistoryAndBackup: React.FC<HistoryAndBackupProps> = ({
               <Database className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900">Penyimpanan & Pencadangan Data Aman</h3>
+              <h3 className="text-base font-bold text-slate-900">Pencadangan File & Cadangan Lokal</h3>
               <p className="text-xs text-slate-500">
-                Data tersimpan otomatis secara aman di database lokal browser dan dapat dicadangkan ke file JSON
+                Ekspor dan impor data lengkap master murid, guru, kelas, mata pelajaran, serta arsip rekaman ujian ke format file JSON.
               </p>
             </div>
           </div>
@@ -114,7 +241,7 @@ export const HistoryAndBackup: React.FC<HistoryAndBackupProps> = ({
               onClick={handleDownloadFullBackup}
               className="flex items-center gap-1.5 rounded-lg bg-blue-50 border border-blue-200 px-3.5 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 transition shadow-2xs"
             >
-              <Download className="h-3.5 w-3.5" /> Cadangkan Database (.JSON)
+              <Download className="h-3.5 w-3.5" /> Unduh Backup (.JSON)
             </button>
 
             <label className="flex items-center gap-1.5 rounded-lg bg-white border border-slate-300 px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer shadow-2xs">
@@ -133,7 +260,7 @@ export const HistoryAndBackup: React.FC<HistoryAndBackupProps> = ({
               className="flex items-center gap-1.5 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-100 transition shadow-2xs"
               title="Kembalikan semua data ke sampel bawaan"
             >
-              <RotateCcw className="h-3.5 w-3.5" /> Reset Database Bawaan
+              <RotateCcw className="h-3.5 w-3.5" /> Reset Default
             </button>
           </div>
         </div>

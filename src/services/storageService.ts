@@ -256,4 +256,90 @@ export const StorageService = {
     const initialRows = generateInitialRows(INITIAL_STUDENTS, DEFAULT_EXAM_CONFIG);
     this.saveCurrentRows(initialRows);
   },
+
+  // --- Neon DB / Cloud PostgreSQL API Integration ---
+  async checkCloudDbStatus(): Promise<{ connected: boolean; version?: string; error?: string }> {
+    try {
+      const res = await fetch('/api/db/status');
+      if (!res.ok) return { connected: false, error: `HTTP ${res.status}` };
+      return await res.json();
+    } catch (e: any) {
+      return { connected: false, error: e.message || 'Cannot reach API' };
+    }
+  },
+
+  async syncFromCloudDb(): Promise<{ success: boolean; message?: string }> {
+    try {
+      const res = await fetch('/api/db/sync');
+      if (!res.ok) return { success: false, message: `HTTP ${res.status}` };
+      const json = await res.json();
+      if (json.connected && json.data) {
+        const { students, teachers, classes, subjects, examArchives, currentConfig, currentScores } = json.data;
+        if (students && students.length > 0) this.saveStudents(students);
+        if (teachers && teachers.length > 0) this.saveTeachers(teachers);
+        if (classes && classes.length > 0) this.saveClasses(classes);
+        if (subjects && subjects.length > 0) this.saveSubjects(subjects);
+        if (examArchives && examArchives.length > 0) {
+          localStorage.setItem(STORAGE_KEYS.EXAM_RECORDS, JSON.stringify(examArchives));
+        }
+        if (currentConfig) this.saveCurrentConfig(currentConfig);
+        if (currentScores) this.saveCurrentRows(currentScores);
+        return { success: true, message: 'Data berhasil disinkronisasi dari Neon DB.' };
+      }
+      return { success: false, message: json.message || 'Tidak ada data di cloud' };
+    } catch (e: any) {
+      return { success: false, message: e.message };
+    }
+  },
+
+  async syncToCloudDb(): Promise<{ success: boolean; message?: string }> {
+    try {
+      const payload = {
+        students: this.getStudents(),
+        teachers: this.getTeachers(),
+        classes: this.getClasses(),
+        subjects: this.getSubjects(),
+        examArchives: this.getExamRecords(),
+        currentConfig: this.getCurrentConfig(),
+        currentScores: this.getCurrentRows(this.getCurrentConfig()),
+      };
+
+      const res = await fetch('/api/db/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        return { success: false, message: err.error || `HTTP ${res.status}` };
+      }
+      return { success: true, message: 'Seluruh data berhasil dicadangkan ke Neon DB!' };
+    } catch (e: any) {
+      return { success: false, message: e.message };
+    }
+  },
+
+  async saveExamRecordToCloud(record: ExamRecord): Promise<void> {
+    try {
+      await fetch('/api/db/exam-records', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(record),
+      });
+    } catch (e) {
+      console.warn('Could not sync exam record to cloud DB:', e);
+    }
+  },
+
+  async deleteExamRecordFromCloud(recordId: string): Promise<void> {
+    try {
+      await fetch(`/api/db/exam-records/${recordId}`, {
+        method: 'DELETE',
+      });
+    } catch (e) {
+      console.warn('Could not delete exam record from cloud DB:', e);
+    }
+  },
 };
+
