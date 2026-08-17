@@ -1,0 +1,7 @@
+{
+  "name": "Analisis Hasil Ujian Siswa",
+  "description": "Aplikasi analisis otomatis hasil ujian siswa dengan lembar butir soal (PG, Isian, Uraian), grafik statistik performa, ekspor PDF & Excel, dan impor data kelas/guru/siswa.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
