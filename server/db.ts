@@ -12,11 +12,19 @@ export function getDbPool(): pg.Pool | null {
   }
 
   if (!pool) {
+    const isLocal =
+      connectionString.includes("localhost") ||
+      connectionString.includes("127.0.0.1") ||
+      connectionString.includes("postgres:5432") ||
+      connectionString.includes("sslmode=disable");
+
     pool = new Pool({
       connectionString,
-      ssl: {
-        rejectUnauthorized: false,
-      },
+      ssl: isLocal
+        ? false
+        : {
+            rejectUnauthorized: false,
+          },
       max: 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,

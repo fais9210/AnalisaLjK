@@ -6,7 +6,7 @@ import {
   INITIAL_TEACHERS,
   SAMPLE_KELAS_1_SCORES,
 } from '../data/initialData';
-import { calculateRowScores, isSameClass, normalizeClassName } from './analysisEngine';
+import { calculateRowScores, getTeacherForClass, isSameClass, normalizeClassName } from './analysisEngine';
 import { ClassGroup, ExamRecord, ExamSheetConfig, Student, StudentScoreRow, Subject, Teacher } from '../types';
 
 const STORAGE_KEYS = {
@@ -87,16 +87,35 @@ export const StorageService = {
     localStorage.setItem(STORAGE_KEYS.TEACHERS, JSON.stringify(teachers));
   },
 
+  clearAllTeachers(): void {
+    this.saveTeachers([]);
+    // Also clear waliKelasName in classes
+    const classes = this.getClasses().map((c) => ({ ...c, waliKelasName: '' }));
+    this.saveClasses(classes);
+    // Also clear teacherName in current config
+    const currentConfig = this.getCurrentConfig();
+    this.saveCurrentConfig({ ...currentConfig, teacherName: '' });
+  },
+
   getClasses(): ClassGroup[] {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.CLASSES);
+      const currentTeachers = this.getTeachers();
+
       if (data !== null) {
         const parsed: ClassGroup[] = JSON.parse(data);
-        if (Array.isArray(parsed)) {
-          return parsed.map((c) => ({
-            ...c,
-            name: normalizeClassName(c.name),
-          }));
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((c) => {
+            const normName = normalizeClassName(c.name);
+            const teacherMatch = currentTeachers.find((t) => isSameClass(t.assignedClass, normName));
+            const wali = teacherMatch ? teacherMatch.name : (c.waliKelasName && currentTeachers.some(t => t.name === c.waliKelasName) ? c.waliKelasName : '');
+
+            return {
+              ...c,
+              name: normName,
+              waliKelasName: wali,
+            };
+          });
         }
       }
     } catch (e) {
@@ -128,6 +147,9 @@ export const StorageService = {
   getCurrentConfig(): ExamSheetConfig {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.CURRENT_CONFIG);
+      const classes = this.getClasses();
+      const teachers = this.getTeachers();
+
       if (data !== null) {
         const parsed: ExamSheetConfig = JSON.parse(data);
         const dateLoc =
@@ -138,10 +160,16 @@ export const StorageService = {
           parsed.schoolName && parsed.schoolName.toUpperCase().includes('KARANGASEM')
             ? parsed.schoolName.replace(/KARANGASEM/gi, 'KARANGNONGKO')
             : parsed.schoolName || 'MMU A-22 KARANGNONGKO';
+        const normClass = normalizeClassName(parsed.className) || 'I - SATU';
+        const properTeacher = getTeacherForClass(normClass, classes, teachers);
+        const resolvedTeacher = properTeacher || (teachers.some((t) => t.name === parsed.teacherName) ? parsed.teacherName : '');
+
         return {
           ...parsed,
-          className: normalizeClassName(parsed.className) || 'I - SATU',
+          className: normClass,
+          teacherName: resolvedTeacher,
           dateLocation: dateLoc,
+          dateDayMonth: parsed.dateDayMonth !== undefined ? parsed.dateDayMonth : '.............',
           schoolName: schoolNm,
         };
       }

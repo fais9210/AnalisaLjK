@@ -260,6 +260,9 @@ export const MasterDataManager: React.FC<MasterDataManagerProps> = ({
       const remaining = teachers.filter((t) => t.id !== id);
       onSaveTeachers(remaining);
       showNotification(`Guru ${name} berhasil dihapus.`);
+    } else if ((type as string) === 'all_teachers') {
+      onSaveTeachers([]);
+      showNotification('Semua data guru berhasil dihapus.');
     } else if (type === 'student') {
       const remaining = students.filter((s) => s.id !== id);
       onSaveStudents(remaining);
@@ -859,6 +862,24 @@ export const MasterDataManager: React.FC<MasterDataManagerProps> = ({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              {teachers.length > 0 && (
+                <button
+                  onClick={() => {
+                    setDeleteConfirmation({
+                      type: 'all_teachers' as any,
+                      id: 'all',
+                      name: 'Semua Guru',
+                      title: 'Hapus Seluruh Data Guru',
+                      description: 'Apakah Anda yakin ingin menghapus SEMUA data guru dari database? Tindakan ini akan mengosongkan seluruh daftar guru.',
+                    });
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-lg transition"
+                  title="Hapus semua data guru"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Hapus Semua Guru
+                </button>
+              )}
+
               <button
                 onClick={() => ExcelService.downloadTemplate('teachers')}
                 className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition"
@@ -909,39 +930,51 @@ export const MasterDataManager: React.FC<MasterDataManagerProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {filteredTeachers.map((t, idx) => (
-                  <tr key={t.id} className="hover:bg-slate-50/70 transition">
-                    <td className="px-4 py-2.5 text-center font-medium text-slate-500">{idx + 1}</td>
-                    <td className="px-4 py-2.5 font-mono text-slate-600">{t.nip || '-'}</td>
-                    <td className="px-4 py-2.5 font-bold text-slate-900">{t.name}</td>
-                    <td className="px-4 py-2.5">
-                      <span className="rounded bg-blue-50 px-2 py-0.5 font-semibold text-blue-800 border border-blue-200 text-[10px]">
-                        {t.role}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 font-semibold text-slate-700">{t.subject || '-'}</td>
-                    <td className="px-4 py-2.5 text-center font-bold text-slate-700">
-                      {t.assignedClass || '-'}
-                    </td>
-                    <td className="px-4 py-2.5 text-slate-600">{t.phone || '-'}</td>
-                    <td className="px-4 py-2.5 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={() => handleOpenTeacherModal(t)}
-                          className="rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-blue-600 transition"
-                        >
-                          <Edit className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteTeacher(t.id, t.name)}
-                          className="rounded p-1 text-slate-500 hover:bg-red-100 hover:text-red-600 transition"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
+                {filteredTeachers.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-10 text-center text-slate-500">
+                      <Users className="mx-auto h-8 w-8 text-slate-300 mb-2" />
+                      <p className="font-semibold text-slate-700">Belum ada data guru</p>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Data guru saat ini kosong. Klik tombol "Tambah Guru" atau Import Excel untuk menambahkan data guru baru.
+                      </p>
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredTeachers.map((t, idx) => (
+                    <tr key={t.id} className="hover:bg-slate-50/70 transition">
+                      <td className="px-4 py-2.5 text-center font-medium text-slate-500">{idx + 1}</td>
+                      <td className="px-4 py-2.5 font-mono text-slate-600">{t.nip || '-'}</td>
+                      <td className="px-4 py-2.5 font-bold text-slate-900">{t.name}</td>
+                      <td className="px-4 py-2.5">
+                        <span className="rounded bg-blue-50 px-2 py-0.5 font-semibold text-blue-800 border border-blue-200 text-[10px]">
+                          {t.role}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 font-semibold text-slate-700">{t.subject || '-'}</td>
+                      <td className="px-4 py-2.5 text-center font-bold text-slate-700">
+                        {t.assignedClass || '-'}
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-600">{t.phone || '-'}</td>
+                      <td className="px-4 py-2.5 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => handleOpenTeacherModal(t)}
+                            className="rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-blue-600 transition"
+                          >
+                            <Edit className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteTeacher(t.id, t.name)}
+                            className="rounded p-1 text-slate-500 hover:bg-red-100 hover:text-red-600 transition"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

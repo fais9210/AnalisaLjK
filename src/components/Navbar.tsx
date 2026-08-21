@@ -5,10 +5,10 @@ import {
   Users,
   Database,
   GraduationCap,
-  Sparkles,
+  Printer,
 } from 'lucide-react';
 
-export type ActiveTab = 'table' | 'dashboard' | 'master' | 'history';
+export type ActiveTab = 'table' | 'dashboard' | 'reports' | 'master' | 'history';
 
 interface NavbarProps {
   activeTab: ActiveTab;
@@ -73,8 +73,22 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               <BarChart3 className="h-4 w-4" />
-              <span className="hidden md:inline">Grafik & Statistik</span>
+              <span className="hidden md:inline">Statistik & Pedagogis</span>
               <span className="md:hidden">Statistik</span>
+            </button>
+
+            <button
+              id="nav-tab-reports"
+              onClick={() => onSelectTab('reports')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs sm:text-sm font-bold transition ${
+                activeTab === 'reports'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              <Printer className="h-4 w-4" />
+              <span className="hidden md:inline">Pelaporan & Cetak</span>
+              <span className="md:hidden">Cetak</span>
             </button>
 
             <button
@@ -88,7 +102,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Users className="h-4 w-4" />
               <span className="hidden md:inline">Data Siswa & Guru</span>
-              <span className="md:hidden">Master Data</span>
+              <span className="md:hidden">Master</span>
             </button>
 
             <button
@@ -110,3 +124,4 @@ export const Navbar: React.FC<NavbarProps> = ({
     </header>
   );
 };
+

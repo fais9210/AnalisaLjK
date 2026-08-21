@@ -8,7 +8,7 @@ import {
   Subject,
   Teacher,
 } from '../types';
-import { calculateRowScores, isSameClass } from '../services/analysisEngine';
+import { calculateRowScores, formatSignatureDate, getTeacherForClass, isSameClass } from '../services/analysisEngine';
 import { SAMPLE_KELAS_1_SCORES } from '../data/initialData';
 import {
   FileText,
@@ -28,6 +28,7 @@ import {
   Layers,
   Users,
   RefreshCw,
+  Calendar,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -71,6 +72,33 @@ export const ExamAnalysisTable: React.FC<ExamAnalysisTableProps> = ({
   const [newStudentGender, setNewStudentGender] = useState<'L' | 'P'>('L');
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
   const [quickNotification, setQuickNotification] = useState<string | null>(null);
+
+  // Date Titimangsa Modal State
+  const [showDateModal, setShowDateModal] = useState(false);
+  const [tempDateLocation, setTempDateLocation] = useState('');
+  const [tempDateDayMonth, setTempDateDayMonth] = useState('');
+  const [tempDateHijri, setTempDateHijri] = useState('');
+
+  const handleOpenDateModal = () => {
+    setTempDateLocation(config.dateLocation || 'Karangnongko');
+    setTempDateDayMonth(config.dateDayMonth !== undefined ? config.dateDayMonth : '.............');
+    setTempDateHijri(config.dateHijri || '1448');
+    setShowDateModal(true);
+  };
+
+  const handleSaveDateModal = (e: React.FormEvent) => {
+    e.preventDefault();
+    const updatedConfig: ExamSheetConfig = {
+      ...config,
+      dateLocation: tempDateLocation.trim() || 'Karangnongko',
+      dateDayMonth: tempDateDayMonth.trim(),
+      dateHijri: tempDateHijri.trim() || '1448',
+      updatedAt: new Date().toISOString(),
+    };
+    onConfigChange(updatedConfig);
+    setShowDateModal(false);
+    showToast(`Titimangsa tanggal berhasil disimpan: ${formatSignatureDate(updatedConfig)}`);
+  };
 
   const showToast = (msg: string) => {
     setQuickNotification(msg);
@@ -235,14 +263,14 @@ export const ExamAnalysisTable: React.FC<ExamAnalysisTableProps> = ({
 
   const handleClassFilterChange = (newClass: string) => {
     const foundClass = classes.find((c) => isSameClass(c.name, newClass));
-    const assignedTeacher = (teachers || []).find((t) => isSameClass(t.assignedClass, newClass));
-    const teacherName = foundClass?.waliKelasName || assignedTeacher?.name || config.teacherName;
+    // Sesuaikan guru pengampu/wali kelas dengan database master data
+    const newTeacherName = getTeacherForClass(newClass, classes, teachers);
     const academicYear = foundClass?.academicYear || config.academicYear;
 
     const updatedConfig: ExamSheetConfig = {
       ...config,
       className: newClass,
-      teacherName,
+      teacherName: newTeacherName,
       academicYear,
     };
     onConfigChange(updatedConfig);
@@ -280,7 +308,9 @@ export const ExamAnalysisTable: React.FC<ExamAnalysisTableProps> = ({
     });
 
     onRowsChange(newRows);
-    showToast(`Beralih ke Kelas ${newClass} (${newRows.length} siswa dimuat)`);
+    showToast(
+      `Beralih ke Kelas ${newClass} • Guru Pengampu: ${newTeacherName || 'Belum diatur'} (${newRows.length} siswa)`
+    );
   };
 
   const handleSyncWithMasterData = () => {
@@ -331,6 +361,14 @@ export const ExamAnalysisTable: React.FC<ExamAnalysisTableProps> = ({
       isPassed: r.totalScore >= newKkm,
     }));
     onRowsChange(updatedRows);
+  };
+
+  const handleTeacherFilterChange = (newTeacherName: string) => {
+    onConfigChange({
+      ...config,
+      teacherName: newTeacherName,
+    });
+    showToast(`Guru Pengampu dipilih: ${newTeacherName}`);
   };
 
   const handleRemoveRow = (studentId: string) => {
@@ -393,6 +431,26 @@ export const ExamAnalysisTable: React.FC<ExamAnalysisTableProps> = ({
               {subjects.map((s) => (
                 <option key={s.id} value={s.name}>
                   {s.name} (KKM: {s.kkm})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+            <span className="text-xs font-bold text-slate-600">Guru:</span>
+            <select
+              id="select-filter-teacher"
+              value={config.teacherName || ''}
+              onChange={(e) => handleTeacherFilterChange(e.target.value)}
+              className="bg-transparent text-sm font-bold text-blue-700 outline-none cursor-pointer max-w-[170px] sm:max-w-[210px] truncate"
+            >
+              <option value="">-- Belum Diatur --</option>
+              {config.teacherName && !teachers.some((t) => t.name === config.teacherName) && (
+                <option value={config.teacherName}>{config.teacherName}</option>
+              )}
+              {teachers.map((t) => (
+                <option key={t.id} value={t.name}>
+                  {t.name}
                 </option>
               ))}
             </select>
@@ -953,16 +1011,190 @@ export const ExamAnalysisTable: React.FC<ExamAnalysisTableProps> = ({
 
           {/* Right signature */}
           <div className="flex flex-col items-center text-center">
-            <p>
-              {config.dateLocation}, ............. {config.dateHijri}
-            </p>
-            <p className="font-semibold mb-14">Wali Kelas / Guru Pengampu</p>
+            <button
+              type="button"
+              onClick={handleOpenDateModal}
+              title="Klik untuk mengubah tanggal titimangsa"
+              className="group/date flex items-center gap-1.5 rounded-lg px-3 py-1 text-slate-800 hover:bg-blue-50 hover:text-blue-700 transition cursor-pointer border border-transparent hover:border-blue-200"
+            >
+              <span className="font-semibold text-xs">
+                {formatSignatureDate(config)}
+              </span>
+              <Edit2 className="h-3.5 w-3.5 text-slate-400 opacity-60 group-hover/date:opacity-100 group-hover/date:text-blue-600 transition" />
+            </button>
+            <p className="font-semibold mb-14 mt-1">Wali Kelas / Guru Pengampu</p>
             <p className="font-bold underline underline-offset-4 uppercase tracking-wider text-slate-900">
-              {config.teacherName}
+              {config.teacherName || '...........................................'}
             </p>
           </div>
         </div>
       </div>
+
+      {/* Date Titimangsa Modal */}
+      {showDateModal && (
+        <div
+          id="date-titimangsa-modal-overlay"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
+        >
+          <div
+            id="date-titimangsa-modal-card"
+            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 space-y-5"
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-xs">
+                  <Calendar className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Edit Tanggal & Titimangsa</h3>
+                  <p className="text-xs text-slate-500">Sesuaikan lokasi kota, tanggal/bulan, dan tahun pengesahan lembar analisa</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDateModal(false)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Live Preview Box */}
+            <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-200">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                Tampilan Hasil Titimangsa:
+              </span>
+              <p className="text-sm font-black text-blue-900">
+                {tempDateLocation.trim() || 'Karangnongko'}, {tempDateDayMonth.trim() || '.............'} {tempDateHijri.trim() || '1448'}
+              </p>
+            </div>
+
+            {/* Presets */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">Pilihan Cepat Format Tanggal:</label>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setTempDateDayMonth('.............')}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${
+                    tempDateDayMonth === '.............'
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  Titik-titik (.............)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const today = new Date();
+                    const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+                    setTempDateDayMonth(`${today.getDate()} ${months[today.getMonth()]}`);
+                    setTempDateHijri(`${today.getFullYear()} M`);
+                  }}
+                  className="rounded-lg px-2.5 py-1 text-xs font-semibold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 transition"
+                >
+                  Hari Ini (Masehi)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTempDateDayMonth("15 Sya'ban");
+                    setTempDateHijri('1448 H');
+                  }}
+                  className="rounded-lg px-2.5 py-1 text-xs font-semibold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 transition"
+                >
+                  15 Sya'ban 1448 H
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTempDateDayMonth("12 Rabi'ul Awwal");
+                    setTempDateHijri('1448 H');
+                  }}
+                  className="rounded-lg px-2.5 py-1 text-xs font-semibold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 transition"
+                >
+                  12 Rabi'ul Awwal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTempDateDayMonth('10 Muharram');
+                    setTempDateHijri('1448 H');
+                  }}
+                  className="rounded-lg px-2.5 py-1 text-xs font-semibold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 transition"
+                >
+                  10 Muharram
+                </button>
+              </div>
+            </div>
+
+            {/* Form Fields */}
+            <form onSubmit={handleSaveDateModal} className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="sm:col-span-1">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Kota / Lokasi
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={tempDateLocation}
+                    onChange={(e) => setTempDateLocation(e.target.value)}
+                    placeholder="e.g. Karangnongko"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                <div className="sm:col-span-1">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Tanggal & Bulan
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={tempDateDayMonth}
+                    onChange={(e) => setTempDateDayMonth(e.target.value)}
+                    placeholder="e.g. ............. atau 15 Sya'ban"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                <div className="sm:col-span-1">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Tahun
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={tempDateHijri}
+                    onChange={(e) => setTempDateHijri(e.target.value)}
+                    placeholder="e.g. 1448 atau 1447-1448 H"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowDateModal(false)}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white hover:bg-blue-700 shadow-sm transition"
+                >
+                  Simpan Perubahan
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Add Student Modal */}
       {showAddStudentModal && (

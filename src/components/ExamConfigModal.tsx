@@ -7,8 +7,8 @@ import {
   Subject,
   Teacher,
 } from '../types';
-import { isSameClass } from '../services/analysisEngine';
-import { Plus, Trash2, X, Check, Sliders } from 'lucide-react';
+import { formatSignatureDate, getTeacherForClass, isSameClass } from '../services/analysisEngine';
+import { Plus, Trash2, X, Check, Sliders, Calendar } from 'lucide-react';
 
 interface ExamConfigModalProps {
   isOpen: boolean;
@@ -39,11 +39,9 @@ export const ExamConfigModal: React.FC<ExamConfigModalProps> = ({
       const updated = { ...prev, [field]: value };
       if (field === 'className') {
         const foundClass = classes.find((c) => isSameClass(c.name, value));
-        const assignedTeacher = teachers.find((t) => isSameClass(t.assignedClass, value));
-        if (foundClass) {
-          if (foundClass.waliKelasName) updated.teacherName = foundClass.waliKelasName;
-          else if (assignedTeacher?.name) updated.teacherName = assignedTeacher.name;
-          if (foundClass.academicYear) updated.academicYear = foundClass.academicYear;
+        updated.teacherName = getTeacherForClass(value, classes, teachers);
+        if (foundClass?.academicYear) {
+          updated.academicYear = foundClass.academicYear;
         }
       }
       if (field === 'subjectName') {
@@ -286,55 +284,120 @@ export const ExamConfigModal: React.FC<ExamConfigModalProps> = ({
                 </div>
               </div>
 
-              <div className="rounded-lg bg-slate-50 p-4 border border-slate-200">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3">
-                  Informasi Tanda Tangan & Lokasi
-                </h4>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="rounded-xl bg-slate-50 p-4 border border-slate-200 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <Calendar className="h-4 w-4 text-blue-600" />
+                    Informasi Tanda Tangan & Titimangsa Tanggal
+                  </h4>
+                  <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+                    {formatSignatureDate(formData)}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="block text-xs text-slate-600 mb-1">Nama Kepala Madrasah / Sekolah</label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Nama Kepala Madrasah / Sekolah</label>
                     <input
                       id="input-config-headmaster"
                       type="text"
                       value={formData.headmasterName}
                       onChange={(e) => handleFieldChange('headmasterName', e.target.value)}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm bg-white outline-none"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium bg-white outline-none focus:border-blue-500"
                       placeholder="e.g. M. MAS'UD"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-600 mb-1">Nama Wali Kelas / Guru Pengampu</label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Nama Wali Kelas / Guru Pengampu</label>
                     <input
                       id="input-config-teacher"
                       type="text"
+                      list="config-teacher-list"
                       value={formData.teacherName}
                       onChange={(e) => handleFieldChange('teacherName', e.target.value)}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm bg-white outline-none"
-                      placeholder="e.g. Ust. Faishol"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium bg-white outline-none focus:border-blue-500"
+                      placeholder="e.g. Belum Diatur / Nama Guru"
                     />
+                    <datalist id="config-teacher-list">
+                      {teachers.map((t) => (
+                        <option key={t.id} value={t.name}>
+                          {t.name} ({t.role || 'Guru'}{t.assignedClass ? ` - ${t.assignedClass}` : ''})
+                        </option>
+                      ))}
+                    </datalist>
                   </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 pt-1">
                   <div>
-                    <label className="block text-xs text-slate-600 mb-1">Kota / Tempat Pengesahan</label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Kota / Lokasi Titimangsa</label>
                     <input
                       id="input-config-location"
                       type="text"
                       value={formData.dateLocation}
                       onChange={(e) => handleFieldChange('dateLocation', e.target.value)}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm bg-white outline-none"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-900 bg-white outline-none focus:border-blue-500"
                       placeholder="e.g. Karangnongko"
                     />
                   </div>
+
                   <div>
-                    <label className="block text-xs text-slate-600 mb-1">Tahun Hijriyah / Kalender Pengesahan</label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Tanggal & Bulan Titimangsa</label>
+                    <input
+                      id="input-config-datedaymonth"
+                      type="text"
+                      value={formData.dateDayMonth !== undefined ? formData.dateDayMonth : '.............'}
+                      onChange={(e) => handleFieldChange('dateDayMonth', e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-900 bg-white outline-none focus:border-blue-500"
+                      placeholder="e.g. ............. atau 15 Sya'ban"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Tahun Pengesahan</label>
                     <input
                       id="input-config-datehijri"
                       type="text"
                       value={formData.dateHijri}
                       onChange={(e) => handleFieldChange('dateHijri', e.target.value)}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm bg-white outline-none"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-900 bg-white outline-none focus:border-blue-500"
                       placeholder="e.g. 1448"
                     />
                   </div>
+                </div>
+
+                {/* Quick presets in config modal */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span className="text-[11px] text-slate-500 font-semibold mr-1">Format Cepat:</span>
+                  <button
+                    type="button"
+                    onClick={() => handleFieldChange('dateDayMonth', '.............')}
+                    className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    Titik-titik (.............)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const today = new Date();
+                      const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+                      handleFieldChange('dateDayMonth', `${today.getDate()} ${months[today.getMonth()]}`);
+                      handleFieldChange('dateHijri', `${today.getFullYear()} M`);
+                    }}
+                    className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    Hari Ini (Masehi)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleFieldChange('dateDayMonth', "15 Sya'ban");
+                      handleFieldChange('dateHijri', '1448 H');
+                    }}
+                    className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    15 Sya'ban 1448 H
+                  </button>
                 </div>
               </div>
             </div>

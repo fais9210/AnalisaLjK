@@ -4,12 +4,13 @@ import {
   ClassGroup,
   ExamSheetConfig,
   ExamStatistics,
+  QuestionAnalysis,
   Student,
   StudentScoreRow,
   Subject,
   Teacher,
 } from '../types';
-import { calculateRowScores, isSameClass } from '../services/analysisEngine';
+import { calculateRowScores, getTeacherForClass, isSameClass } from '../services/analysisEngine';
 import { SAMPLE_KELAS_1_SCORES } from '../data/initialData';
 import {
   BarChart,
@@ -23,11 +24,8 @@ import {
   PieChart,
   Pie,
   Cell,
-  LineChart,
-  Line,
 } from 'recharts';
 import {
-  TrendingUp,
   Award,
   AlertCircle,
   Brain,
@@ -35,14 +33,19 @@ import {
   FileText,
   Users,
   CheckCircle2,
-  XCircle,
-  HelpCircle,
   BarChart3,
   BookOpen,
   UserCheck,
   Calendar,
   Layers,
+  Check,
+  RefreshCw,
+  XCircle,
+  HelpCircle,
+  FileSpreadsheet,
 } from 'lucide-react';
+import { PdfService } from '../services/pdfService';
+import { ExcelService } from '../services/excelService';
 
 interface StatsDashboardProps {
   config: ExamSheetConfig;
@@ -58,9 +61,8 @@ interface StatsDashboardProps {
   aiAnalysis: AIAnalysisResult | null;
   isAiLoading: boolean;
   onExportReportPdf: () => void;
+  onNavigateToPrintCenter?: () => void;
 }
-
-const COLORS = ['#10B981', '#3B82F6', '#F59E0B', '#EF4444'];
 
 export const StatsDashboard: React.FC<StatsDashboardProps> = ({
   config,
@@ -76,14 +78,14 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({
   aiAnalysis,
   isAiLoading,
   onExportReportPdf,
+  onNavigateToPrintCenter,
 }) => {
-  const [activeChartTab, setActiveChartTab] = useState<'difficulty' | 'distribution' | 'comparison'>('difficulty');
+  const [activeChartTab, setActiveChartTab] = useState<'difficulty' | 'distribution' | 'discrimination'>('difficulty');
 
   const handleClassChange = (newClassName: string) => {
     if (!onConfigChange || !onRowsChange) return;
     const foundClass = classes.find((c) => isSameClass(c.name, newClassName));
-    const assignedTeacher = teachers.find((t) => isSameClass(t.assignedClass, newClassName));
-    const teacherName = foundClass?.waliKelasName || assignedTeacher?.name || config.teacherName;
+    const teacherName = getTeacherForClass(newClassName, classes, teachers);
     const academicYear = foundClass?.academicYear || config.academicYear;
 
     const updatedConfig: ExamSheetConfig = {
@@ -144,14 +146,24 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({
     onRowsChange(updatedRows);
   };
 
+  const handleTeacherChange = (newTeacherName: string) => {
+    if (!onConfigChange) return;
+    onConfigChange({
+      ...config,
+      teacherName: newTeacherName,
+    });
+  };
+
   // Chart data 1: Question item difficulty
   const questionDifficultyData = stats.questionAnalyses.map((q) => ({
-    name: `No.${q.number} (${q.type.toUpperCase()})`,
+    name: `No.${q.number}`,
     benar: q.correctCount,
     salah: q.wrongCount,
     indeks: Math.round(q.difficultyIndex * 100),
     kategori: q.difficultyCategory,
-    maxScore: q.maxScore,
+    dayaBeda: Math.round((q.discriminationIndex ?? 0) * 100),
+    dayaBedaCat: q.discriminationCategory ?? '-',
+    rekomendasi: q.itemRecommendation ?? 'Diterima',
   }));
 
   // Chart data 2: Grade distribution
@@ -168,13 +180,22 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({
     { name: 'Belum Tuntas', value: stats.failedCount, color: '#EF4444' },
   ];
 
+  const quality = stats.qualitySummary || {
+    accepted: 0,
+    revised: 0,
+    rejected: 0,
+    easyCount: 0,
+    mediumCount: 0,
+    hardCount: 0,
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Banner with Exam Meta and Quick Actions */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-gradient-to-r from-blue-900 to-indigo-900 p-6 text-white shadow-md">
         <div>
           <div className="flex items-center gap-2 text-blue-200 text-xs font-bold uppercase tracking-wider mb-1">
-            <BarChart3 className="h-4 w-4" /> Dashboard Analisis & Statistik Ujian
+            <BarChart3 className="h-4 w-4" /> Dashboard Analisis Statistik & Pedagogis Madrasah
           </div>
           <h2 className="text-xl sm:text-2xl font-black">{config.schoolName}</h2>
           <p className="text-sm text-blue-100 mt-0.5">
@@ -182,7 +203,7 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             id="btn-ai-analyze"
             onClick={onGenerateAiAnalysis}
@@ -194,12 +215,21 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({
           </button>
 
           <button
+            onClick={() => ExcelService.exportComprehensiveReportToExcel(config, rows, stats, stats.questionAnalyses)}
+            className="flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3.5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md transition"
+            title="Ekspor Paket Excel Lengkap 5 Sheet"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Paket Excel 5-in-1
+          </button>
+
+          <button
             id="btn-export-stats-pdf"
             onClick={onExportReportPdf}
-            className="flex items-center gap-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2.5 text-xs sm:text-sm font-bold text-white transition backdrop-blur-xs"
+            className="flex items-center gap-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 px-3.5 py-2.5 text-xs sm:text-sm font-bold text-white transition backdrop-blur-xs"
           >
             <FileText className="h-4 w-4" />
-            Ekspor Laporan PDF
+            Ekspor PDF
           </button>
         </div>
       </div>
@@ -210,7 +240,7 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({
           {/* Class Filter */}
           <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
             <Layers className="h-4 w-4 text-blue-600" />
-            <span className="text-xs font-bold text-slate-600">Pilih Kelas:</span>
+            <span className="text-xs font-bold text-slate-600">Kelas:</span>
             <select
               value={config.className}
               onChange={(e) => handleClassChange(e.target.value)}
@@ -227,7 +257,7 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({
           {/* Subject Filter */}
           <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
             <BookOpen className="h-4 w-4 text-emerald-600" />
-            <span className="text-xs font-bold text-slate-600">Pilih Fan (Mapel):</span>
+            <span className="text-xs font-bold text-slate-600">Fan (Mapel):</span>
             <select
               value={config.subjectName}
               onChange={(e) => handleSubjectChange(e.target.value)}
@@ -236,6 +266,27 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({
               {subjects.map((s) => (
                 <option key={s.id} value={s.name}>
                   {s.name} (KKM: {s.kkm})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Teacher Filter */}
+          <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+            <UserCheck className="h-4 w-4 text-purple-600" />
+            <span className="text-xs font-bold text-slate-600">Guru:</span>
+            <select
+              value={config.teacherName || ''}
+              onChange={(e) => handleTeacherChange(e.target.value)}
+              className="bg-transparent text-sm font-bold text-purple-700 outline-none cursor-pointer max-w-[180px] truncate"
+            >
+              <option value="">-- Belum Diatur --</option>
+              {config.teacherName && !teachers.some((t) => t.name === config.teacherName) && (
+                <option value={config.teacherName}>{config.teacherName}</option>
+              )}
+              {teachers.map((t) => (
+                <option key={t.id} value={t.name}>
+                  {t.name}
                 </option>
               ))}
             </select>
@@ -300,7 +351,7 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Nilai Terendah</span>
           <div className="mt-1.5 text-2xl font-black text-red-600">{stats.lowestScore}</div>
           <div className="mt-2 text-[11px] font-medium text-slate-500">
-            Perlu perhatian
+            Perlu remedial
           </div>
         </div>
 
@@ -321,14 +372,76 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({
         </div>
       </div>
 
+      {/* Item Psychometrics & Bank Soal Quality Summary Bar */}
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 mb-4">
+          <div className="flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700">
+              <BookOpen className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-900 text-sm">Analisis Psikometri & Kelayakan Bank Soal</h3>
+              <p className="text-[11px] text-slate-500">Evaluasi daya beda (Metode 27% Kelompok Atas-Bawah) & tingkat kesukaran</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => PdfService.generateItemAnalysisSummaryPdf(config, stats)}
+              className="flex items-center gap-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition border border-indigo-200"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              Unduh Rekap Kualitas Soal (PDF)
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3">
+            <div className="flex items-center justify-between text-emerald-800 font-bold text-xs">
+              <span className="flex items-center gap-1"><Check className="h-3.5 w-3.5" /> Soal Diterima (Baik)</span>
+              <span className="text-base font-black">{quality.accepted}</span>
+            </div>
+            <p className="text-[11px] text-emerald-700 mt-1">Daya pembeda baik (D ≥ 0.30), siap masuk Bank Soal Madrasah.</p>
+          </div>
+
+          <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
+            <div className="flex items-center justify-between text-amber-800 font-bold text-xs">
+              <span className="flex items-center gap-1"><RefreshCw className="h-3.5 w-3.5" /> Perlu Direvisi</span>
+              <span className="text-base font-black">{quality.revised}</span>
+            </div>
+            <p className="text-[11px] text-amber-700 mt-1">Daya pembeda cukup (0.20 ≤ D &lt; 0.30), perbaiki pilihan pengecoh.</p>
+          </div>
+
+          <div className="rounded-lg bg-red-50 border border-red-200 p-3">
+            <div className="flex items-center justify-between text-red-800 font-bold text-xs">
+              <span className="flex items-center gap-1"><XCircle className="h-3.5 w-3.5" /> Ditolak / Diganti</span>
+              <span className="text-base font-black">{quality.rejected}</span>
+            </div>
+            <p className="text-[11px] text-red-700 mt-1">Daya pembeda buruk atau negatif (D &lt; 0.20), butir soal tidak valid.</p>
+          </div>
+
+          <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
+            <div className="flex items-center justify-between text-slate-800 font-bold text-xs">
+              <span className="flex items-center gap-1"><Layers className="h-3.5 w-3.5" /> Komposisi Soal</span>
+              <span className="text-xs font-black">{config.questions.length} Butir</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[11px] font-semibold text-slate-600">
+              <span>Mudah: <b>{quality.easyCount}</b></span>
+              <span>Sedang: <b>{quality.mediumCount}</b></span>
+              <span>Sukar: <b>{quality.hardCount}</b></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Main Charts Section */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Left 2 Cols: Main Interactive Chart */}
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs lg:col-span-2">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 mb-4">
             <div>
-              <h3 className="font-bold text-slate-800 text-base">Analisis Tingkat Kesukaran & Daya Pembeda Soal</h3>
-              <p className="text-xs text-slate-500">Persentase siswa menjawab benar vs salah pada setiap butir soal</p>
+              <h3 className="font-bold text-slate-800 text-base">Visualisasi Analisis Butir Soal Ujian</h3>
+              <p className="text-xs text-slate-500">Tingkat kesukaran, daya pembeda, dan sebaran perolehan nilai</p>
             </div>
             <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg text-xs font-semibold">
               <button
@@ -337,7 +450,15 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({
                   activeChartTab === 'difficulty' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600'
                 }`}
               >
-                Butir Soal
+                Tingkat Kesukaran
+              </button>
+              <button
+                onClick={() => setActiveChartTab('discrimination')}
+                className={`rounded px-3 py-1 transition ${
+                  activeChartTab === 'discrimination' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600'
+                }`}
+              >
+                Daya Pembeda (D)
               </button>
               <button
                 onClick={() => setActiveChartTab('distribution')}
@@ -345,7 +466,7 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({
                   activeChartTab === 'distribution' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600'
                 }`}
               >
-                Sebaran Nilai
+                Sebaran Grade
               </button>
             </div>
           </div>
@@ -369,6 +490,9 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({
                             <p className="mt-1 font-semibold text-amber-300">
                               Tingkat Kesukaran: {data.kategori} ({data.indeks}%)
                             </p>
+                            <p className="text-cyan-300 font-semibold">
+                              Rekomendasi: {data.rekomendasi}
+                            </p>
                           </div>
                         );
                       }
@@ -378,6 +502,31 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({
                   <Legend verticalAlign="top" height={36} />
                   <Bar dataKey="benar" name="Jawaban Benar" fill="#3B82F6" radius={[4, 4, 0, 0]} />
                   <Bar dataKey="salah" name="Jawaban Salah" fill="#EF4444" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : activeChartTab === 'discrimination' ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={questionDifficultyData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                  <XAxis dataKey="name" angle={-35} textAnchor="end" height={50} tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 11 }} domain={[-100, 100]} />
+                  <Tooltip
+                    content={({ active, payload, label }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="rounded-lg bg-slate-900 p-3 text-xs text-white shadow-xl">
+                            <p className="font-bold text-indigo-300">{label}</p>
+                            <p className="mt-1 text-white font-bold">Indeks Daya Pembeda: {data.dayaBeda / 100}</p>
+                            <p className="text-amber-300">Kategori: {data.dayaBedaCat}</p>
+                            <p className="mt-1 text-emerald-300 font-semibold">Status: {data.rekomendasi}</p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Bar dataKey="dayaBeda" name="Indeks Daya Pembeda (D x 100)" fill="#6366F1" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -401,16 +550,16 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({
           <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 p-3 text-xs border border-slate-200">
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1.5 font-medium text-slate-700">
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500"></span> Soal Mudah (P &gt; 70%)
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500"></span> Mudah (P &gt; 0.70)
               </span>
               <span className="flex items-center gap-1.5 font-medium text-slate-700">
-                <span className="h-2.5 w-2.5 rounded-full bg-amber-500"></span> Soal Sedang (30% - 70%)
+                <span className="h-2.5 w-2.5 rounded-full bg-blue-500"></span> Sedang (0.30 - 0.70)
               </span>
               <span className="flex items-center gap-1.5 font-medium text-slate-700">
-                <span className="h-2.5 w-2.5 rounded-full bg-red-500"></span> Soal Sukar (P &lt; 30%)
+                <span className="h-2.5 w-2.5 rounded-full bg-red-500"></span> Sukar (P &lt; 0.30)
               </span>
             </div>
-            <span className="text-[11px] text-slate-500 italic">Rumus: P = Benar / Total Peserta</span>
+            <span className="text-[11px] text-slate-500 italic">Daya Pembeda D = (Benar Atas - Benar Bawah) / (27% N)</span>
           </div>
         </div>
 
@@ -419,7 +568,7 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({
           {/* Ketuntasan Donut Chart */}
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
             <h3 className="font-bold text-slate-800 text-sm mb-1">Status Ketuntasan Belajar (KKM {config.kkm})</h3>
-            <p className="text-xs text-slate-500 mb-4">Perbandingan siswa lulus KKM vs belum tuntas</p>
+            <p className="text-xs text-slate-500 mb-4">Perbandingan siswa lulus KKM vs perlu remedial</p>
 
             <div className="h-44 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -576,85 +725,104 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({
         )}
       </div>
 
-      {/* Lists Section: Top 5 Achievers & Remedial Action List */}
+      {/* Pedagogical Action Tables: Remedial Planner & Enrichment Details */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        {/* Top 5 High Achievers */}
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
-          <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
-                <Award className="h-4 w-4" />
-              </div>
-              <h3 className="font-bold text-slate-800 text-base">5 Siswa Nilai Tertinggi</h3>
-            </div>
-            <span className="rounded bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 border border-amber-200">
-              Pengayaan Materi
-            </span>
-          </div>
-
-          <div className="space-y-2.5">
-            {stats.topStudents.map((s, idx) => (
-              <div
-                key={idx}
-                className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs sm:text-sm hover:bg-amber-50/50 transition"
-              >
-                <div className="flex items-center gap-3">
-                  <span className={`flex h-6 w-6 items-center justify-center rounded-full font-bold text-xs ${
-                    idx === 0 ? 'bg-amber-400 text-slate-900 shadow-2xs' : idx === 1 ? 'bg-slate-300 text-slate-900' : 'bg-amber-200 text-slate-900'
-                  }`}>
-                    {idx + 1}
-                  </span>
-                  <span className="font-bold text-slate-800">{s.name}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="rounded-md bg-emerald-100 px-2.5 py-1 font-black text-emerald-800 text-xs">
-                    {s.score} Pts
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Remedial List */}
+        {/* Remedial Action Plan */}
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
           <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-100 text-red-700">
                 <AlertCircle className="h-4 w-4" />
               </div>
-              <h3 className="font-bold text-slate-800 text-base">Daftar Siswa Perlu Remedial</h3>
+              <div>
+                <h3 className="font-bold text-slate-800 text-base">Rencana Program Remedial</h3>
+                <p className="text-xs text-slate-500">Detail butir soal salah & saran tindakan perbaikan</p>
+              </div>
             </div>
-            <span className="rounded bg-red-50 px-2.5 py-1 text-xs font-bold text-red-800 border border-red-200">
-              {stats.needRemedial.length} Siswa (&lt; KKM {config.kkm})
-            </span>
+            <button
+              onClick={() => PdfService.generateRemedialProgramPdf(config, stats)}
+              className="flex items-center gap-1 text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-lg transition border border-red-200"
+            >
+              <FileText className="h-3 w-3" /> Cetak
+            </button>
           </div>
 
-          <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
-            {stats.needRemedial.length === 0 ? (
+          <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+            {stats.remedialDetails && stats.remedialDetails.length > 0 ? (
+              stats.remedialDetails.map((s, idx) => (
+                <div
+                  key={s.studentId}
+                  className="rounded-lg border border-red-200 bg-red-50/40 p-3 text-xs"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-900 text-sm">{s.name}</span>
+                    <span className="rounded bg-red-600 px-2 py-0.5 font-bold text-white text-[11px]">
+                      Nilai: {s.score}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-slate-600">
+                    <span className="font-semibold text-slate-700">Soal Salah: </span>
+                    {s.wrongQuestionNumbers.length > 0 ? `No. ${s.wrongQuestionNumbers.join(', ')}` : 'Konsep Dasar'}
+                  </div>
+                  <div className="mt-1 rounded bg-white p-2 border border-red-100 text-slate-700">
+                    <span className="font-bold text-red-800">Saran Tindakan: </span>
+                    {s.suggestedAction}
+                  </div>
+                </div>
+              ))
+            ) : (
               <div className="rounded-lg bg-emerald-50 p-6 text-center border border-emerald-200">
                 <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-600 mb-2" />
                 <p className="font-bold text-emerald-900 text-sm">Luar Biasa! Seluruh Siswa Telah Tuntas.</p>
-                <p className="text-xs text-emerald-700 mt-1">Tidak ada siswa yang berada di bawah KKM {config.kkm}.</p>
+                <p className="text-xs text-emerald-700 mt-1">Tidak ada siswa yang perlu mengikuti program remedial.</p>
               </div>
-            ) : (
-              stats.needRemedial.map((s, idx) => (
+            )}
+          </div>
+        </div>
+
+        {/* Enrichment Action Plan */}
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
+          <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+                <Award className="h-4 w-4" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-800 text-base">Rencana Program Pengayaan</h3>
+                <p className="text-xs text-slate-500">Pemberdayaan siswa tuntas & tutor sebaya</p>
+              </div>
+            </div>
+            <button
+              onClick={() => PdfService.generateEnrichmentProgramPdf(config, stats)}
+              className="flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg transition border border-emerald-200"
+            >
+              <FileText className="h-3 w-3" /> Cetak
+            </button>
+          </div>
+
+          <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+            {stats.enrichmentDetails && stats.enrichmentDetails.length > 0 ? (
+              stats.enrichmentDetails.map((s, idx) => (
                 <div
-                  key={idx}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50/40 p-3 text-xs sm:text-sm"
+                  key={s.studentId}
+                  className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-3 text-xs"
                 >
-                  <div>
-                    <span className="font-bold text-slate-900">{s.name}</span>
-                    <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-500">
-                      <span>Fokus perbaikan:</span>
-                      <span className="font-semibold text-red-700">{s.deficientTypes.join(', ')}</span>
-                    </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-900 text-sm">{s.name}</span>
+                    <span className="rounded bg-emerald-600 px-2 py-0.5 font-bold text-white text-[11px]">
+                      Nilai: {s.score}
+                    </span>
                   </div>
-                  <span className="rounded-md bg-red-600 px-2.5 py-1 font-black text-white text-xs">
-                    {s.score} Pts
-                  </span>
+                  <div className="mt-2 rounded bg-white p-2 border border-emerald-100 text-slate-700">
+                    <span className="font-bold text-emerald-800">Bentuk Kegiatan: </span>
+                    {s.suggestedActivity}
+                  </div>
                 </div>
               ))
+            ) : (
+              <div className="rounded-lg bg-slate-50 p-6 text-center border border-slate-200">
+                <p className="text-xs text-slate-500">Belum ada siswa dengan nilai pengayaan.</p>
+              </div>
             )}
           </div>
         </div>

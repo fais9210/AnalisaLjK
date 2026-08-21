@@ -22,15 +22,35 @@ import {
 } from './services/analysisEngine';
 import { PdfService } from './services/pdfService';
 import { ExcelService } from './services/excelService';
-import { Navbar, ActiveTab } from './components/Navbar';
+import { Sidebar, ActiveTab } from './components/Sidebar';
 import { ExamAnalysisTable } from './components/ExamAnalysisTable';
 import { StatsDashboard } from './components/StatsDashboard';
 import { MasterDataManager } from './components/MasterDataManager';
 import { HistoryAndBackup } from './components/HistoryAndBackup';
 import { ExamConfigModal } from './components/ExamConfigModal';
+import { ReportAndPrintCenter } from './components/ReportAndPrintCenter';
+import {
+  PanelLeft,
+  PanelLeftClose,
+  Sliders,
+  Printer,
+  Sparkles,
+  Layers,
+  BookOpen,
+  UserCheck,
+  CheckCircle2,
+  Calendar,
+} from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('table');
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() => {
+    // Default open on wide screens, closed on small mobile
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 1024;
+    }
+    return true;
+  });
 
   // Master Data
   const [students, setStudents] = useState<Student[]>([]);
@@ -165,14 +185,13 @@ export default function App() {
       const assignedTeacher = newTeachers.find(
         (t) => isSameClass(t.assignedClass, currentConfig.className) && (t.role === 'Wali Kelas' || t.subject === currentConfig.subjectName)
       );
-      if (assignedTeacher) {
-        const updatedConfig: ExamSheetConfig = {
-          ...currentConfig,
-          teacherName: assignedTeacher.name,
-        };
-        setCurrentConfig(updatedConfig);
-        StorageService.saveCurrentConfig(updatedConfig);
-      }
+      const updatedTeacherName = assignedTeacher ? assignedTeacher.name : (newTeachers.some(t => t.name === currentConfig.teacherName) ? currentConfig.teacherName : '');
+      const updatedConfig: ExamSheetConfig = {
+        ...currentConfig,
+        teacherName: updatedTeacherName,
+      };
+      setCurrentConfig(updatedConfig);
+      StorageService.saveCurrentConfig(updatedConfig);
     }
   };
 
@@ -360,99 +379,192 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100/70 text-slate-800 antialiased flex flex-col font-sans">
-      {/* Top Navigation */}
-      <Navbar
+    <div className="min-h-screen bg-slate-100/80 text-slate-800 antialiased flex flex-col font-sans">
+      {/* Left Sidebar (Collapsible / Hideable) */}
+      <Sidebar
         activeTab={activeTab}
         onSelectTab={setActiveTab}
-        schoolName={currentConfig.schoolName}
-        academicYear={currentConfig.academicYear}
+        config={currentConfig}
+        onOpenConfigModal={() => setIsConfigModalOpen(true)}
+        isOpen={isSidebarOpen}
+        onToggle={() => setIsSidebarOpen((prev) => !prev)}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
-        {activeTab === 'table' && (
-          <ExamAnalysisTable
+      {/* Main Content Area Container with dynamic left padding */}
+      <div
+        className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out ${
+          isSidebarOpen ? 'lg:pl-72' : 'lg:pl-0'
+        }`}
+      >
+        {/* Top Action Header Bar */}
+        <header
+          id="app-top-action-bar"
+          className="sticky top-0 z-30 flex flex-wrap items-center justify-between border-b border-slate-200 bg-white/95 px-4 sm:px-6 py-3 shadow-2xs backdrop-blur-xs print:hidden gap-3"
+        >
+          {/* Left section: Toggle button & Breadcrumbs */}
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              id="header-sidebar-toggle"
+              onClick={() => setIsSidebarOpen((prev) => !prev)}
+              title={isSidebarOpen ? 'Sembunyikan Menu Samping' : 'Tampilkan Menu Samping'}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition"
+              aria-label="Toggle Sidebar Menu"
+            >
+              {isSidebarOpen ? (
+                <PanelLeftClose className="h-5 w-5" />
+              ) : (
+                <PanelLeft className="h-5 w-5 text-blue-600" />
+              )}
+            </button>
+
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+                <span>Analisis Ujian</span>
+                <span className="text-slate-300">•</span>
+                <span className="font-bold text-blue-700 capitalize">
+                  {activeTab === 'table' && 'Lembar Analisa & Input Nilai'}
+                  {activeTab === 'dashboard' && 'Statistik & Psikometri AI'}
+                  {activeTab === 'reports' && 'Pelaporan & Cetak Resmi'}
+                  {activeTab === 'master' && 'Data Siswa & Guru'}
+                  {activeTab === 'history' && 'Database & Backup'}
+                </span>
+              </div>
+              <h1 className="text-sm sm:text-base font-black text-slate-900 leading-tight truncate">
+                {currentConfig.schoolName}
+              </h1>
+            </div>
+          </div>
+
+          {/* Right section: Active context tags & Quick Settings Button */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Quick Context Badges */}
+            <div className="hidden sm:flex items-center gap-1.5 rounded-lg bg-slate-50 border border-slate-200/80 px-2.5 py-1 text-xs">
+              <span className="font-bold text-slate-700 flex items-center gap-1">
+                <Layers className="h-3.5 w-3.5 text-blue-600" />
+                {currentConfig.className}
+              </span>
+              <span className="text-slate-300">|</span>
+              <span className="font-semibold text-emerald-700 flex items-center gap-1">
+                <BookOpen className="h-3.5 w-3.5 text-emerald-600" />
+                {currentConfig.subjectName}
+              </span>
+              <span className="text-slate-300">|</span>
+              <span className="font-medium text-slate-600 flex items-center gap-1">
+                <UserCheck className="h-3.5 w-3.5 text-purple-600" />
+                {currentConfig.teacherName || 'Guru'}
+              </span>
+            </div>
+
+            {/* Quick Button to open Config */}
+            <button
+              id="header-open-config-btn"
+              onClick={() => setIsConfigModalOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition shadow-2xs"
+            >
+              <Sliders className="h-3.5 w-3.5" />
+              <span className="hidden md:inline">Format Soal</span>
+            </button>
+          </div>
+        </header>
+
+        {/* Responsive Main Content Grid / Flow */}
+        <main className="flex-1 w-full p-3 sm:p-5 lg:p-6 min-w-0">
+          <div className="mx-auto w-full max-w-full space-y-6">
+            {activeTab === 'table' && (
+              <ExamAnalysisTable
+                config={currentConfig}
+                rows={currentRows}
+                questionAnalyses={questionAnalyses}
+                classes={classes}
+                subjects={subjects}
+                teachers={teachers}
+                allStudents={students}
+                onConfigChange={handleConfigChange}
+                onRowsChange={handleRowsChange}
+                onOpenConfigModal={() => setIsConfigModalOpen(true)}
+                onExportPdf={handleExportOfficialPdf}
+                onExportExcel={handleExportExcel}
+                onSaveRecord={handleSaveRecord}
+                onAddNewStudentToClass={handleAddNewStudentToClass}
+              />
+            )}
+
+            {activeTab === 'dashboard' && (
+              <StatsDashboard
+                config={currentConfig}
+                stats={examStats}
+                rows={currentRows}
+                classes={classes}
+                subjects={subjects}
+                teachers={teachers}
+                allStudents={students}
+                onConfigChange={handleConfigChange}
+                onRowsChange={handleRowsChange}
+                onGenerateAiAnalysis={handleGenerateAiAnalysis}
+                aiAnalysis={aiAnalysis}
+                isAiLoading={isAiLoading}
+                onExportReportPdf={handleExportReportPdf}
+                onNavigateToPrintCenter={() => setActiveTab('reports')}
+              />
+            )}
+
+            {activeTab === 'reports' && (
+              <ReportAndPrintCenter
+                config={currentConfig}
+                stats={examStats}
+                rows={currentRows}
+                questionAnalyses={questionAnalyses}
+                onConfigChange={handleConfigChange}
+              />
+            )}
+
+            {activeTab === 'master' && (
+              <MasterDataManager
+                students={students}
+                teachers={teachers}
+                classes={classes}
+                subjects={subjects}
+                onSaveStudents={handleSaveStudents}
+                onSaveTeachers={handleSaveTeachers}
+                onSaveClasses={handleSaveClasses}
+                onSaveSubjects={handleSaveSubjects}
+              />
+            )}
+
+            {activeTab === 'history' && (
+              <HistoryAndBackup
+                examRecords={examRecords}
+                onLoadRecord={handleLoadRecord}
+                onDeleteRecord={handleDeleteRecord}
+                onRefreshAllData={refreshAllData}
+              />
+            )}
+          </div>
+        </main>
+
+        {/* Modal: Configure Exam & Questions */}
+        {isConfigModalOpen && (
+          <ExamConfigModal
+            isOpen={isConfigModalOpen}
+            onClose={() => setIsConfigModalOpen(false)}
             config={currentConfig}
-            rows={currentRows}
-            questionAnalyses={questionAnalyses}
             classes={classes}
             subjects={subjects}
             teachers={teachers}
-            allStudents={students}
-            onConfigChange={handleConfigChange}
-            onRowsChange={handleRowsChange}
-            onOpenConfigModal={() => setIsConfigModalOpen(true)}
-            onExportPdf={handleExportOfficialPdf}
-            onExportExcel={handleExportExcel}
-            onSaveRecord={handleSaveRecord}
-            onAddNewStudentToClass={handleAddNewStudentToClass}
+            onSave={handleConfigChange}
           />
         )}
 
-        {activeTab === 'dashboard' && (
-          <StatsDashboard
-            config={currentConfig}
-            stats={examStats}
-            rows={currentRows}
-            classes={classes}
-            subjects={subjects}
-            teachers={teachers}
-            allStudents={students}
-            onConfigChange={handleConfigChange}
-            onRowsChange={handleRowsChange}
-            onGenerateAiAnalysis={handleGenerateAiAnalysis}
-            aiAnalysis={aiAnalysis}
-            isAiLoading={isAiLoading}
-            onExportReportPdf={handleExportReportPdf}
-          />
-        )}
-
-        {activeTab === 'master' && (
-          <MasterDataManager
-            students={students}
-            teachers={teachers}
-            classes={classes}
-            subjects={subjects}
-            onSaveStudents={handleSaveStudents}
-            onSaveTeachers={handleSaveTeachers}
-            onSaveClasses={handleSaveClasses}
-            onSaveSubjects={handleSaveSubjects}
-          />
-        )}
-
-        {activeTab === 'history' && (
-          <HistoryAndBackup
-            examRecords={examRecords}
-            onLoadRecord={handleLoadRecord}
-            onDeleteRecord={handleDeleteRecord}
-            onRefreshAllData={refreshAllData}
-          />
-        )}
-      </main>
-
-      {/* Modal: Configure Exam & Questions */}
-      {isConfigModalOpen && (
-        <ExamConfigModal
-          isOpen={isConfigModalOpen}
-          onClose={() => setIsConfigModalOpen(false)}
-          config={currentConfig}
-          classes={classes}
-          subjects={subjects}
-          teachers={teachers}
-          onSave={handleConfigChange}
-        />
-      )}
-
-      {/* Subtle Footer */}
-      <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500">
-        <div className="mx-auto max-w-7xl px-4 flex flex-wrap items-center justify-between gap-2">
-          <span>
-            <b>Sistem Analisis Hasil Ujian Siswa & Butir Soal</b> • MMU A-22 Karangnongko
-          </span>
-          <span>Dukungan Ekspor PDF, Excel, Statistik Visual & Analisis Pedagogis</span>
-        </div>
-      </footer>
+        {/* Footer */}
+        <footer className="border-t border-slate-200 bg-white py-3.5 text-center text-xs text-slate-500 print:hidden">
+          <div className="mx-auto w-full px-4 sm:px-6 flex flex-wrap items-center justify-between gap-2">
+            <span>
+              <b>Sistem Analisis Hasil Ujian Siswa & Butir Soal</b> • MMU A-22 Karangnongko
+            </span>
+            <span>Dukungan Ekspor PDF, Excel, Statistik Visual & Analisis Pedagogis</span>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 }

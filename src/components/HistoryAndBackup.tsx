@@ -157,25 +157,25 @@ export const HistoryAndBackup: React.FC<HistoryAndBackupProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-slate-900">Integrasi Cloud Database (Neon DB & Render)</h3>
+                <h3 className="text-base font-bold text-slate-900">Integrasi Database (PostgreSQL Lokal / Docker / Neon DB)</h3>
                 {cloudStatus.loading ? (
                   <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
                     <RefreshCw className="h-3 w-3 animate-spin" /> Memeriksa...
                   </span>
                 ) : cloudStatus.connected ? (
                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800 border border-emerald-200">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Terhubung ke Neon DB
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Terhubung ke Database PostgreSQL
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 border border-amber-200">
-                    Mode Lokal / Standalone
+                    Mode Offline / Database Lokal Browser (LocalStorage)
                   </span>
                 )}
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
                 {cloudStatus.connected
-                  ? 'Aplikasi terhubung ke PostgreSQL Neon DB. Data tersinkronisasi di cloud.'
-                  : 'Variabel DATABASE_URL belum terpasang. Data disimpan aman di browser dan siap disambungkan ke Neon DB saat deploy.'}
+                  ? 'Aplikasi terhubung ke database PostgreSQL server. Data tersinkronisasi aman.'
+                  : 'Aplikasi berjalan 100% offline menggunakan database lokal browser. Anda juga dapat menghubungkan ke PostgreSQL lokal / Neon DB melalui DATABASE_URL.'}
               </p>
             </div>
           </div>
@@ -213,9 +213,11 @@ export const HistoryAndBackup: React.FC<HistoryAndBackupProps> = ({
         <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs text-slate-600 flex items-start gap-2.5">
           <Zap className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
           <div>
-            <p className="font-semibold text-slate-800">Petunjuk Konfigurasi Render & Neon DB:</p>
-            <p className="mt-0.5 text-[11px] text-slate-500">
-              Di dashboard <b>Render Web Service</b>, masukkan Environment Variable <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200 font-mono text-indigo-700">DATABASE_URL</code> dengan connection string PostgreSQL dari <b>Neon DB</b> (contoh: <code className="text-slate-600 font-mono">postgres://user:pass@ep-xyz.aws.neon.tech/neondb?sslmode=require</code>). Aplikasi akan otomatis membuat tabel dan menyinkronkan data.
+            <p className="font-semibold text-slate-800">Petunjuk Konfigurasi Database (Lokal / Docker / Cloud):</p>
+            <p className="mt-0.5 text-[11px] text-slate-500 leading-relaxed">
+              <b>1. Mode Offline / Tanpa DB:</b> Otomatis berjalan 100% menggunakan browser local storage.<br />
+              <b>2. Mode PostgreSQL Lokal:</b> Pasang <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200 font-mono text-indigo-700">DATABASE_URL=postgres://postgres:password@localhost:5432/nama_database</code> di file <code className="font-mono">.env</code>.<br />
+              <b>3. Mode Cloud Neon DB / Render:</b> Masukkan connection string Neon DB di dashboard Render / hosting.
             </p>
           </div>
         </div>

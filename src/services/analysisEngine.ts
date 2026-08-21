@@ -89,6 +89,40 @@ export function isSameClass(classA?: string, classB?: string): boolean {
   return normalizeClassName(classA) === normalizeClassName(classB);
 }
 
+export function getTeacherForClass(
+  className?: string,
+  classes: { name: string; waliKelasName?: string }[] = [],
+  teachers: { name: string; assignedClass?: string; role?: string }[] = []
+): string {
+  if (!className) return '';
+  const norm = normalizeClassName(className);
+
+  // 1. Look in teachers list by assignedClass (source of truth: data guru)
+  const assignedTeacher = (teachers || []).find((t) => isSameClass(t.assignedClass, norm));
+  if (assignedTeacher?.name && assignedTeacher.name.trim() !== '') {
+    return assignedTeacher.name.trim();
+  }
+
+  // 2. Look in classes list
+  const foundClass = classes.find((c) => isSameClass(c.name, norm));
+  if (foundClass?.waliKelasName && foundClass.waliKelasName.trim() !== '') {
+    return foundClass.waliKelasName.trim();
+  }
+
+  return '';
+}
+
+export function formatSignatureDate(config?: Partial<ExamSheetConfig> | null): string {
+  if (!config) return 'Karangnongko, ............. 1448';
+  const loc = (config.dateLocation && config.dateLocation.trim()) || 'Karangnongko';
+  const dayMonth =
+    config.dateDayMonth !== undefined && config.dateDayMonth !== null && config.dateDayMonth.trim() !== ''
+      ? config.dateDayMonth.trim()
+      : '.............';
+  const year = (config.dateHijri && config.dateHijri.trim()) || '1448';
+  return `${loc}, ${dayMonth} ${year}`;
+}
+
 export function calculateRowScores(
   scores: Record<string, number>,
   config: ExamSheetConfig
@@ -141,6 +175,7 @@ export function computeQuestionAnalyses(
       difficultyCategory: 'Sedang',
       discriminationIndex: 0,
       discriminationCategory: 'Cukup',
+      itemRecommendation: 'Diterima',
     }));
   }
 
@@ -169,7 +204,7 @@ export function computeQuestionAnalyses(
       }
     }
 
-    // Difficulty Index P = (Total Points Awarded) / (Total Students * Max Score) or Correct / Total
+    // Difficulty Index P = (Total Points Awarded) / (Total Students * Max Score)
     const maxPossiblePoints = totalStudents * q.maxScore;
     const difficultyIndex = maxPossiblePoints > 0 ? totalPoints / maxPossiblePoints : 0;
 
@@ -195,9 +230,20 @@ export function computeQuestionAnalyses(
 
     let discriminationCategory = 'Baik';
     if (discriminationIndex >= 0.4) discriminationCategory = 'Sangat Baik';
-    else if (discriminationIndex >= 0.2) discriminationCategory = 'Baik';
-    else if (discriminationIndex >= 0.0) discriminationCategory = 'Cukup';
-    else discriminationCategory = 'Perlu Direvisi';
+    else if (discriminationIndex >= 0.3) discriminationCategory = 'Baik';
+    else if (discriminationIndex >= 0.2) discriminationCategory = 'Cukup';
+    else if (discriminationIndex >= 0.0) discriminationCategory = 'Jelek / Revisi';
+    else discriminationCategory = 'Ditolak / Negatif';
+
+    // Item Recommendation based on standard educational assessment rules
+    let itemRecommendation: 'Diterima' | 'Diterima & Direvisi' | 'Ditolak / Dibuang' = 'Diterima';
+    if (discriminationIndex < 0.0) {
+      itemRecommendation = 'Ditolak / Dibuang';
+    } else if (discriminationIndex < 0.20 || difficultyIndex < 0.20 || difficultyIndex > 0.85) {
+      itemRecommendation = 'Diterima & Direvisi';
+    } else {
+      itemRecommendation = 'Diterima';
+    }
 
     return {
       questionId: q.id,
@@ -211,6 +257,7 @@ export function computeQuestionAnalyses(
       difficultyCategory,
       discriminationIndex: Number(discriminationIndex.toFixed(2)),
       discriminationCategory,
+      itemRecommendation,
     };
   });
 }
@@ -235,6 +282,9 @@ export function computeExamStatistics(
       gradeDistribution: { gradeA: 0, gradeB: 0, gradeC: 0, gradeD: 0 },
       topStudents: [],
       needRemedial: [],
+      remedialDetails: [],
+      enrichmentDetails: [],
+      qualitySummary: { accepted: 0, revised: 0, rejected: 0, easyCount: 0, mediumCount: 0, hardCount: 0 },
       questionAnalyses: computeQuestionAnalyses(rows, config),
       hardestQuestions: [],
       easiestQuestions: [],
@@ -279,14 +329,23 @@ export function computeExamStatistics(
     .slice(0, 5)
     .map((r) => ({ name: r.studentName, score: r.totalScore }));
 
-  // Remedial Students with deficient question analysis
-  const needRemedial = rows
+  // Detailed Remedial breakdown
+  const remedialDetails = rows
     .filter((r) => !r.isPassed)
     .map((r) => {
       const deficientTypes: string[] = [];
+      const wrongQuestionNumbers: number[] = [];
+
       const pgQuestions = config.questions.filter((q) => q.type === 'pg');
       const isianQuestions = config.questions.filter((q) => q.type === 'isian');
       const uraianQuestions = config.questions.filter((q) => q.type === 'uraian');
+
+      for (const q of config.questions) {
+        const score = Number(r.scores[q.id]) || 0;
+        if (score < q.maxScore * 0.5) {
+          wrongQuestionNumbers.push(q.number);
+        }
+      }
 
       const pgScore = pgQuestions.reduce((sum, q) => sum + (r.scores[q.id] || 0), 0);
       const pgMax = pgQuestions.reduce((sum, q) => sum + q.maxScore, 0);
@@ -299,17 +358,68 @@ export function computeExamStatistics(
 
       if (pgMax > 0 && pgScore / pgMax < 0.6) deficientTypes.push('Pilihan Ganda');
       if (isianMax > 0 && isianScore / isianMax < 0.6) deficientTypes.push('Isian Singkat');
-      if (uraianMax > 0 && uraianScore / uraianMax < 0.6) deficientTypes.push('Uraian/Esai');
+      if (uraianMax > 0 && uraianScore / uraianMax < 0.6) deficientTypes.push('Uraian / Esai');
+
+      let suggestedAction = 'Bimbingan perorangan dan penugasan ulang';
+      if (r.totalScore < config.kkm * 0.6) {
+        suggestedAction = 'Pembelajaran ulang materi pokok & tes remedial komprehensif';
+      } else if (wrongQuestionNumbers.length <= 4) {
+        suggestedAction = `Tutor sebaya & pembahasan butir soal no. ${wrongQuestionNumbers.join(', ')}`;
+      } else {
+        suggestedAction = 'Bimbingan khusus kelompok kecil dan tugas terstruktur';
+      }
 
       return {
+        studentId: r.studentId,
+        nis: `2024${r.studentId.replace(/\D/g, '').slice(-4).padStart(4, '0')}`,
         name: r.studentName,
         score: r.totalScore,
-        deficientTypes: deficientTypes.length > 0 ? deficientTypes : ['Semua Tipe Soal'],
+        deficientTypes: deficientTypes.length > 0 ? deficientTypes : ['Konsep Dasar'],
+        wrongQuestionNumbers,
+        suggestedAction,
       };
     })
     .sort((a, b) => a.score - b.score);
 
+  const needRemedial = remedialDetails.map((rd) => ({
+    name: rd.name,
+    score: rd.score,
+    deficientTypes: rd.deficientTypes,
+  }));
+
+  // Enrichment breakdown for high achievers (>= KKM)
+  const enrichmentDetails = rows
+    .filter((r) => r.isPassed)
+    .sort((a, b) => b.totalScore - a.totalScore)
+    .map((r) => {
+      let suggestedActivity = 'Pendalaman materi aplikasi dan problem solving';
+      if (r.totalScore >= 90) {
+        suggestedActivity = 'Diberdayakan sebagai Tutor Sebaya bagi rekan yang remedial';
+      } else if (r.totalScore >= 80) {
+        suggestedActivity = 'Pemberian soal tantangan HOTS dan studi kasus fikih kontekstual';
+      } else {
+        suggestedActivity = 'Tugas bacaan pengayaan bab berikutnya dan latihan mandiri';
+      }
+
+      return {
+        studentId: r.studentId,
+        nis: `2024${r.studentId.replace(/\D/g, '').slice(-4).padStart(4, '0')}`,
+        name: r.studentName,
+        score: r.totalScore,
+        suggestedActivity,
+      };
+    });
+
   const questionAnalyses = computeQuestionAnalyses(rows, config);
+
+  const qualitySummary = {
+    accepted: questionAnalyses.filter((q) => q.itemRecommendation === 'Diterima').length,
+    revised: questionAnalyses.filter((q) => q.itemRecommendation === 'Diterima & Direvisi').length,
+    rejected: questionAnalyses.filter((q) => q.itemRecommendation === 'Ditolak / Dibuang').length,
+    easyCount: questionAnalyses.filter((q) => q.difficultyCategory === 'Mudah').length,
+    mediumCount: questionAnalyses.filter((q) => q.difficultyCategory === 'Sedang').length,
+    hardCount: questionAnalyses.filter((q) => q.difficultyCategory === 'Sukar').length,
+  };
 
   const hardestQuestions = [...questionAnalyses]
     .sort((a, b) => a.difficultyIndex - b.difficultyIndex)
@@ -332,6 +442,9 @@ export function computeExamStatistics(
     gradeDistribution,
     topStudents,
     needRemedial,
+    remedialDetails,
+    enrichmentDetails,
+    qualitySummary,
     questionAnalyses,
     hardestQuestions,
     easiestQuestions,

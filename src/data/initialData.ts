@@ -26,12 +26,12 @@ export const DEFAULT_QUESTIONS: QuestionDefinition[] = [
 ];
 
 export const INITIAL_CLASSES: ClassGroup[] = [
-  { id: 'cls-1', name: 'I - SATU', level: 'Ibtidaiyah / Dasar', academicYear: '1447-1448 H', waliKelasName: 'Ust. Faishol' },
-  { id: 'cls-2', name: 'II - DUA', level: 'Ibtidaiyah / Dasar', academicYear: '1447-1448 H', waliKelasName: 'Ust. Abdullah' },
-  { id: 'cls-3', name: 'III - TIGA', level: 'Ibtidaiyah / Dasar', academicYear: '1447-1448 H', waliKelasName: 'Ust. Zaqiyatur rifqi' },
-  { id: 'cls-4', name: 'IV - EMPAT', level: 'Ibtidaiyah / Dasar', academicYear: '1447-1448 H', waliKelasName: 'Ust. Saifulloh Muhyi' },
-  { id: 'cls-5', name: 'V - LIMA', level: 'Ibtidaiyah / Dasar', academicYear: '1447-1448 H', waliKelasName: 'Ust. M. Kho\'ir' },
-  { id: 'cls-6', name: 'VI - ENAM', level: 'Ibtidaiyah / Dasar', academicYear: '1447-1448 H', waliKelasName: 'Ust. Mas\'udi' },
+  { id: 'cls-1', name: 'I - SATU', level: 'Ibtidaiyah / Dasar', academicYear: '1447-1448 H', waliKelasName: '' },
+  { id: 'cls-2', name: 'II - DUA', level: 'Ibtidaiyah / Dasar', academicYear: '1447-1448 H', waliKelasName: '' },
+  { id: 'cls-3', name: 'III - TIGA', level: 'Ibtidaiyah / Dasar', academicYear: '1447-1448 H', waliKelasName: '' },
+  { id: 'cls-4', name: 'IV - EMPAT', level: 'Ibtidaiyah / Dasar', academicYear: '1447-1448 H', waliKelasName: '' },
+  { id: 'cls-5', name: 'V - LIMA', level: 'Ibtidaiyah / Dasar', academicYear: '1447-1448 H', waliKelasName: '' },
+  { id: 'cls-6', name: 'VI - ENAM', level: 'Ibtidaiyah / Dasar', academicYear: '1447-1448 H', waliKelasName: '' },
 ];
 
 export const INITIAL_SUBJECTS: Subject[] = [
@@ -87,15 +87,7 @@ export const INITIAL_STUDENTS: Student[] = [
   { id: 'std-29', nis: '20190603', name: 'ILHAM PRATAMA', gender: 'L', className: 'VI - ENAM', active: true },
 ];
 
-export const INITIAL_TEACHERS: Teacher[] = [
-  { id: 'tch-01', nip: '198001012005011001', name: "M. MAS'UD", role: 'Kepala Madrasah', phone: '081234567890' },
-  { id: 'tch-02', nip: '199203152019031002', name: 'Ust. Faishol', role: 'Wali Kelas', subject: 'FIQIH', assignedClass: 'I - SATU', phone: '081398765432' },
-  { id: 'tch-03', nip: '198807202015041003', name: 'Ust. Abdullah', role: 'Wali Kelas', subject: 'AQIDAH AKHLAK', assignedClass: 'II - DUA', phone: '085712345678' },
-  { id: 'tch-04', nip: '199511112021022004', name: 'Usth. Siti Khodijah', role: 'Wali Kelas', subject: 'NAHWU', assignedClass: 'III - TIGA', phone: '087812349999' },
-  { id: 'tch-05', nip: '198504052010011005', name: 'Ust. Ahmad Fauzi', role: 'Wali Kelas', subject: 'SHOROF', assignedClass: 'IV - EMPAT', phone: '082199887766' },
-  { id: 'tch-06', nip: '199008122018021006', name: 'Ust. M. Syukron', role: 'Wali Kelas', subject: 'TARIKH ISLAM', assignedClass: 'V - LIMA', phone: '081234567001' },
-  { id: 'tch-07', nip: '198206192009031007', name: 'Ust. Zainal Abidin', role: 'Wali Kelas', subject: 'BAHASA ARAB', assignedClass: 'VI - ENAM', phone: '081234567002' },
-];
+export const INITIAL_TEACHERS: Teacher[] = [];
 
 export const DEFAULT_EXAM_CONFIG: ExamSheetConfig = {
   id: 'exam-default-1',
@@ -106,9 +98,10 @@ export const DEFAULT_EXAM_CONFIG: ExamSheetConfig = {
   subjectName: 'FIQIH',
   kkm: 70,
   dateLocation: 'Karangnongko',
+  dateDayMonth: '.............',
   dateHijri: '1448',
-  headmasterName: "M. MAS'UD",
-  teacherName: 'Ust. Faishol',
+  headmasterName: 'M. MAS\'UD',
+  teacherName: '',
   questions: DEFAULT_QUESTIONS,
   updatedAt: new Date().toISOString(),
 };

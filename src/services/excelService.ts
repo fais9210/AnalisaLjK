@@ -1,9 +1,254 @@
 import * as XLSX from 'xlsx';
-import { ExamSheetConfig, QuestionAnalysis, Student, StudentScoreRow, Teacher } from '../types';
-import { normalizeClassName } from './analysisEngine';
+import { ExamSheetConfig, ExamStatistics, QuestionAnalysis, Student, StudentScoreRow, Teacher } from '../types';
+import { normalizeClassName, formatSignatureDate } from './analysisEngine';
 
 export const ExcelService = {
-  // Export Lembar Analisa to XLSX
+  // Export Comprehensive Multi-Sheet Excel Report
+  exportComprehensiveReportToExcel(
+    config: ExamSheetConfig,
+    rows: StudentScoreRow[],
+    stats: ExamStatistics,
+    questionAnalyses: QuestionAnalysis[]
+  ): void {
+    const wb = XLSX.utils.book_new();
+
+    // ==========================================
+    // SHEET 1: LEMBAR ANALISIS NILAI UTAMA
+    // ==========================================
+    const headerRows = [
+      [config.title],
+      [config.schoolName],
+      [config.academicYear],
+      [],
+      [`KELAS : ${config.className}`, '', '', `FAN / MAPEL : ${config.subjectName}`, '', '', `KKM : ${config.kkm}`],
+      [],
+    ];
+
+    const pgQuestions = config.questions.filter((q) => q.type === 'pg');
+    const isianQuestions = config.questions.filter((q) => q.type === 'isian');
+    const uraianQuestions = config.questions.filter((q) => q.type === 'uraian');
+
+    const subHeader1: string[] = ['NO', 'NAMA MURID'];
+    const subHeader2: string[] = ['', ''];
+
+    if (pgQuestions.length > 0) {
+      subHeader1.push(`PILIHAN GANDA (POIN ${pgQuestions[0]?.maxScore || 5})`);
+      for (let i = 1; i < pgQuestions.length; i++) subHeader1.push('');
+      for (const q of pgQuestions) subHeader2.push(String(q.number));
+    }
+
+    if (isianQuestions.length > 0) {
+      subHeader1.push(`ISIAN (POIN ${isianQuestions[0]?.maxScore || 6})`);
+      for (let i = 1; i < isianQuestions.length; i++) subHeader1.push('');
+      for (const q of isianQuestions) subHeader2.push(String(q.number));
+    }
+
+    if (uraianQuestions.length > 0) {
+      subHeader1.push(`URAIAN (POIN ${uraianQuestions[0]?.maxScore || 7})`);
+      for (let i = 1; i < uraianQuestions.length; i++) subHeader1.push('');
+      for (const q of uraianQuestions) subHeader2.push(String(q.number));
+    }
+
+    subHeader1.push('JML BENAR', 'JML SALAH', 'NILAI AKHIR', 'STATUS KETUNTASAN');
+    subHeader2.push('', '', '', '');
+
+    const dataRows = rows.map((r, idx) => {
+      const rowArr: any[] = [idx + 1, r.studentName];
+      for (const q of config.questions) {
+        rowArr.push(r.scores[q.id] !== undefined ? r.scores[q.id] : 0);
+      }
+      rowArr.push(r.correctQuestionsCount, r.wrongQuestionsCount, r.totalScore, r.isPassed ? 'TUNTAS' : 'REMEDIAL');
+      return rowArr;
+    });
+
+    const summaryBenarRow: any[] = ['', 'JUMLAH JAWABAN BENAR'];
+    const summarySalahRow: any[] = ['', 'JUMLAH JAWABAN SALAH'];
+    const summaryTingkatRow: any[] = ['', 'TINGKAT KESUKARAN (P)'];
+    const summaryDayaBedaRow: any[] = ['', 'DAYA PEMBEDA (D)'];
+
+    for (const q of config.questions) {
+      const qa = questionAnalyses.find((a) => a.questionId === q.id);
+      summaryBenarRow.push(qa ? qa.correctCount : 0);
+      summarySalahRow.push(qa ? qa.wrongCount : 0);
+      summaryTingkatRow.push(qa ? `${qa.difficultyCategory} (${qa.difficultyIndex})` : '-');
+      summaryDayaBedaRow.push(qa ? `${qa.discriminationCategory} (${qa.discriminationIndex})` : '-');
+    }
+    summaryBenarRow.push('', '', '', '');
+    summarySalahRow.push('', '', '', '');
+    summaryTingkatRow.push('', '', '', '');
+    summaryDayaBedaRow.push('', '', '', '');
+
+    const signatureRows = [
+      [],
+      ['', 'Mengetahui,', '', '', '', '', '', '', '', '', formatSignatureDate(config)],
+      ['', 'Kepala Madrasah', '', '', '', '', '', '', '', '', 'Wali Kelas / Guru Pengampu'],
+      [],
+      [],
+      ['', config.headmasterName, '', '', '', '', '', '', '', '', config.teacherName || '...........................................'],
+    ];
+
+    const allSheetData = [
+      ...headerRows,
+      subHeader1,
+      subHeader2,
+      ...dataRows,
+      [],
+      summaryBenarRow,
+      summarySalahRow,
+      summaryTingkatRow,
+      summaryDayaBedaRow,
+      ...signatureRows,
+    ];
+
+    const ws1 = XLSX.utils.aoa_to_sheet(allSheetData);
+    ws1['!cols'] = [
+      { wch: 5 },
+      { wch: 28 },
+      ...config.questions.map(() => ({ wch: 6 })),
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 18 },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws1, 'Lembar_Analisa_Nilai');
+
+    // ==========================================
+    // SHEET 2: ANALISIS BUTIR SOAL
+    // ==========================================
+    const itemAnalysisHeaders = [
+      ['ANALISIS KUALITAS BUTIR SOAL UJIAN'],
+      [`Mata Pelajaran: ${config.subjectName} | Kelas: ${config.className} | Tahun Ajaran: ${config.academicYear}`],
+      [],
+      ['NO SOAL', 'TIPE SOAL', 'BOBOT MAKS', 'JUMLAH BENAR', 'JUMLAH SALAH', 'INDEKS KESUKARAN (P)', 'KATEGORI KESUKARAN', 'DAYA PEMBEDA (D)', 'KATEGORI DAYA BEDA', 'REKOMENDASI SOAL'],
+    ];
+
+    const itemAnalysisRows = questionAnalyses.map((q) => [
+      `Soal No. ${q.number}`,
+      q.type.toUpperCase(),
+      q.maxScore,
+      q.correctCount,
+      q.wrongCount,
+      q.difficultyIndex,
+      q.difficultyCategory,
+      q.discriminationIndex ?? 0,
+      q.discriminationCategory ?? '-',
+      q.itemRecommendation ?? 'Diterima',
+    ]);
+
+    const ws2 = XLSX.utils.aoa_to_sheet([...itemAnalysisHeaders, ...itemAnalysisRows]);
+    ws2['!cols'] = [
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 22 },
+      { wch: 20 },
+      { wch: 18 },
+      { wch: 22 },
+      { wch: 22 },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Analisis_Butir_Soal');
+
+    // ==========================================
+    // SHEET 3: PROGRAM REMEDIAL
+    // ==========================================
+    const remedialHeaders = [
+      ['PROGRAM & PELAKSANAAN REMEDIAL (PERBAIKAN PEMBELAJARAN)'],
+      [`Madrasah: ${config.schoolName} | Mapel: ${config.subjectName} | Kelas: ${config.className} | KKM: ${config.kkm}`],
+      [],
+      ['NO', 'NAMA SISWA', 'NILAI AWAL', 'BUTIR SOAL BERMASALAH', 'BENTUK PELAKSANAAN REMEDIAL', 'NILAI AKHIR REMEDIAL', 'STATUS'],
+    ];
+
+    const remedialData = (stats.remedialDetails || []).map((s, idx) => [
+      idx + 1,
+      s.name,
+      s.score,
+      s.wrongQuestionNumbers.length > 0 ? `No. ${s.wrongQuestionNumbers.join(', ')}` : 'Konsep Dasar',
+      s.suggestedAction,
+      '',
+      'TUNTAS',
+    ]);
+
+    const ws3 = XLSX.utils.aoa_to_sheet([...remedialHeaders, ...(remedialData.length > 0 ? remedialData : [['-', 'Semua Siswa Telah Tuntas', '-', '-', '-', '-', 'TUNTAS']])]);
+    ws3['!cols'] = [
+      { wch: 6 },
+      { wch: 28 },
+      { wch: 12 },
+      { wch: 30 },
+      { wch: 45 },
+      { wch: 20 },
+      { wch: 12 },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws3, 'Program_Remedial');
+
+    // ==========================================
+    // SHEET 4: PROGRAM PENGAYAAN
+    // ==========================================
+    const enrichmentHeaders = [
+      ['PROGRAM PENGAYAAN SISWA BERPRESTASI'],
+      [`Madrasah: ${config.schoolName} | Mapel: ${config.subjectName} | Kelas: ${config.className} | KKM: ${config.kkm}`],
+      [],
+      ['NO', 'NAMA SISWA', 'NILAI AWAL', 'BENTUK KEGIATAN PENGAYAAN', 'METODE', 'STATUS'],
+    ];
+
+    const enrichmentData = (stats.enrichmentDetails || []).map((s, idx) => [
+      idx + 1,
+      s.name,
+      s.score,
+      s.suggestedActivity,
+      'Mandiri / Tutor Sebaya',
+      'Terlaksana',
+    ]);
+
+    const ws4 = XLSX.utils.aoa_to_sheet([...enrichmentHeaders, ...(enrichmentData.length > 0 ? enrichmentData : [['-', 'Belum ada data', '-', '-', '-', '-']])]);
+    ws4['!cols'] = [
+      { wch: 6 },
+      { wch: 28 },
+      { wch: 12 },
+      { wch: 50 },
+      { wch: 25 },
+      { wch: 15 },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws4, 'Program_Pengayaan');
+
+    // ==========================================
+    // SHEET 5: REKAPITULASI STATISTIK
+    // ==========================================
+    const statsData = [
+      ['REKAPITULASI STATISTIK HASIL EVALUASI PEMBELAJARAN'],
+      [`Madrasah: ${config.schoolName} | Tahun: ${config.academicYear} | Kelas: ${config.className} | Mapel: ${config.subjectName}`],
+      [],
+      ['PARAMETER STATISTIK', 'NILAI / HASIL', 'KETERANGAN'],
+      ['Jumlah Total Siswa', stats.totalStudents, 'Orang'],
+      ['Rata-rata Nilai Kelas', stats.averageScore, 'Skala 0-100'],
+      ['Nilai Tertinggi', stats.highestScore, 'Skor Tertinggi'],
+      ['Nilai Terendah', stats.lowestScore, 'Skor Terendah'],
+      ['Median (Nilai Tengah)', stats.medianScore, 'Skor Tengah'],
+      ['Standar Deviasi', stats.standardDeviation, 'Tingkat Persebaran Nilai'],
+      ['Siswa Tuntas (>= KKM)', stats.passedCount, `Persentase: ${stats.passPercentage}%`],
+      ['Siswa Belum Tuntas (< KKM)', stats.failedCount, 'Perlu Remedial'],
+      [],
+      ['DISTRIBUSI PREDIKAT NILAI', 'JUMLAH SISWA', 'PERSENTASE'],
+      ['Sangat Baik (Grade A >= 85)', stats.gradeDistribution.gradeA, `${stats.totalStudents > 0 ? ((stats.gradeDistribution.gradeA / stats.totalStudents) * 100).toFixed(1) : 0}%`],
+      ['Baik (Grade B 75 - 84)', stats.gradeDistribution.gradeB, `${stats.totalStudents > 0 ? ((stats.gradeDistribution.gradeB / stats.totalStudents) * 100).toFixed(1) : 0}%`],
+      ['Cukup (Grade C KKM - 74)', stats.gradeDistribution.gradeC, `${stats.totalStudents > 0 ? ((stats.gradeDistribution.gradeC / stats.totalStudents) * 100).toFixed(1) : 0}%`],
+      ['Kurang / Remedial (Grade D < KKM)', stats.gradeDistribution.gradeD, `${stats.totalStudents > 0 ? ((stats.gradeDistribution.gradeD / stats.totalStudents) * 100).toFixed(1) : 0}%`],
+    ];
+
+    const ws5 = XLSX.utils.aoa_to_sheet(statsData);
+    ws5['!cols'] = [
+      { wch: 35 },
+      { wch: 20 },
+      { wch: 30 },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws5, 'Rekap_Statistik');
+
+    const fileName = `Paket_Lengkap_Analisis_Ujian_${config.className}_${config.subjectName}_${Date.now()}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+  },
+
+  // Export Lembar Analisa to XLSX (Legacy single sheet)
   exportExamSheetToExcel(
     config: ExamSheetConfig,
     rows: StudentScoreRow[],
@@ -81,11 +326,11 @@ export const ExcelService = {
     // Signature rows
     const signatureRows = [
       [],
-      ['', 'Mengetahui,', '', '', '', '', '', '', '', '', `${config.dateLocation}, ............. ${config.dateHijri}`],
+      ['', 'Mengetahui,', '', '', '', '', '', '', '', '', formatSignatureDate(config)],
       ['', 'Kepala Madrasah', '', '', '', '', '', '', '', '', 'Wali Kelas / Guru Pengampu'],
       [],
       [],
-      ['', config.headmasterName, '', '', '', '', '', '', '', '', config.teacherName],
+      ['', config.headmasterName, '', '', '', '', '', '', '', '', config.teacherName || '...........................................'],
     ];
 
     const allSheetData = [
@@ -282,3 +527,4 @@ export const ExcelService = {
     });
   },
 };
+
